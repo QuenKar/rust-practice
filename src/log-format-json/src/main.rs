@@ -3,17 +3,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::sync::Once;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn, Metadata};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_log::log::Level;
 use tracing_log::LogTracer;
-use tracing_subscriber::filter::Targets;
+use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, Registry};
 
 const DEFAULT_LOG_LEVEL: &str = "info";
+
+const LOG_TO_FILE: &str = "log2file2568";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LoggingOptions {
@@ -69,6 +70,7 @@ pub fn init_global_logging(opts: &LoggingOptions) -> Vec<WorkerGuard> {
                 Layer::new()
                     .with_writer(writer)
                     .with_ansi(atty::is(atty::Stream::Stdout))
+                    .with_filter(FilterFn::new(|metadata| metadata.name() != LOG_TO_FILE))
                     .boxed(),
             )
         } else {
@@ -98,6 +100,7 @@ pub fn init_global_logging(opts: &LoggingOptions) -> Vec<WorkerGuard> {
                     .with_target(false)
                     .without_time()
                     .with_ansi(false)
+                    .with_filter(FilterFn::new(|metadata| metadata.name() == LOG_TO_FILE))
                     .boxed(),
             )
         } else {
@@ -126,6 +129,15 @@ pub struct LogResponse {
     msgs: HashMap<String, String>,
 }
 
+/// Implement log! based on tracing::error!
+/// Use [LOG_TO_FILE] to make the log save to a file.
+#[allow(unused)]
+macro_rules! log {
+    ($($arg:tt)*) => {
+        tracing::error!(name: LOG_TO_FILE, $($arg)*);
+    };
+}
+
 #[tokio::main]
 async fn main() {
     let opts = LoggingOptions::default();
@@ -134,6 +146,7 @@ async fn main() {
     let mut map = HashMap::new();
     map.insert("key1".to_string(), "value1".to_string());
     map.insert("key2".to_string(), "value2".to_string());
+    map.insert("key3".to_string(), "value3".to_string());
 
     let resp = LogResponse {
         timestamp: "2025-02-18T03:15:45.778839Z".to_string(),
@@ -142,4 +155,7 @@ async fn main() {
     };
 
     warn!("{}", serde_json::to_string(&resp).unwrap());
+    log!("{}", serde_json::to_string(&resp).unwrap());
+
+    log!("hello");
 }
