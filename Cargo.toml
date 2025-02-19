@@ -1,5 +1,6 @@
 [workspace]
-members = ["src/rust_decimal"]
+members = ["src/log-format-json", "src/rust_decimal"]
+resolver = "2"
 
 [workspace.package]
 version = "0.4.2"
@@ -8,3 +9,6 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 rust_decimal = "1.32.0"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+tokio = { version = "1.43.0", features = ["full"] }
