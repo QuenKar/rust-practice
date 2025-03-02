@@ -1,0 +1,4 @@
+sql
+select * from t1
+select * from t2
+select from t3

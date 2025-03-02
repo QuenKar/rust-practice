@@ -1,5 +1,5 @@
 [workspace]
-members = ["src/log-format-json", "src/rust_decimal"]
+members = [ "sqlparser-test-pass","src/log-format-json", "src/rust_decimal"]
 resolver = "2"
 
 [workspace.package]
