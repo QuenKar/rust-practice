@@ -129,7 +129,7 @@ fn process_sql_file(
     // 打开输入文件
     let file = File::open(input_path)?;
     let _file_size = file.metadata()?.len();
-    let reader = BufReader::with_capacity(10 * 1024 * 1024, file); // 1MB 缓冲区
+    let reader = BufReader::with_capacity(10 * 1024 * 1024, file); // 10MB 缓冲区
 
     // 创建 CSV 读取器
     let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
@@ -195,4 +195,144 @@ fn process_sql_file(
     error_writer.flush()?;
 
     Ok(stats)
+}
+
+#[test]
+fn test_sql_parser() {
+    let sql = r#"WITH login AS (
+    SELECT 
+        vopenid,
+        dtEventTime,
+        SUBSTR(dtEventTime, 1, 10) AS login_day
+    FROM 
+        100842_PlayerLogin_bklog
+    WHERE 
+        dtEventTime >= '2024-12-08 00:00:00' 
+        AND dtEventTime <= '2024-12-08 14:01:00'
+        AND dtEventTime >= '2024-12-09 10:00:00'
+        AND ClientVersion <> '99.99.999.99'
+), 
+-- 登出记录
+logout AS (
+    SELECT 
+        vopenid,
+        dtEventTime,
+        SUBSTR(dtEventTime, 1, 10) AS logout_day
+    FROM 
+        100842_PlayerLogout_bklog2
+    WHERE 
+        dtEventTime >= '2024-12-08 00:00:00' 
+        AND dtEventTime <= '2024-12-08 14:01:00'
+        AND dtEventTime >= '2024-12-09 10:00:00'
+        AND ClientVersion <> '99.99.999.99'
+), 
+-- 合并登录和登出记录
+active_users AS (
+    SELECT 
+        vopenid,
+        active_day
+    FROM (
+        SELECT 
+            vopenid, 
+            login_day AS active_day 
+        FROM 
+            login
+        UNION ALL
+        SELECT 
+            vopenid, 
+            logout_day AS active_day 
+        FROM 
+            logout
+    ) AS combined
+    GROUP BY 
+        vopenid, 
+        active_day
+)
+SELECT 
+    COUNT(DISTINCT vopenid) AS p_count 
+FROM 
+    active_users;"#;
+    let dialect = MySqlDialect {};
+    let result = Parser::parse_sql(&dialect, sql);
+    println!("{:?}", result);
+    assert_eq!(result.is_ok(), true);
+}
+
+#[allow(unused)]
+fn v3_parse_error_remove_dup() {
+    // read csv file queryset_v3_parse_error.csv
+    // remove duplicate sql
+    // write to new file queryset_v3_parse_error_no_dup.csv
+    let input_path = "/Users/zww/workspace/codes/github/rust-practice/queryset_v3_parse_error.csv";
+    let output_path =
+        "/Users/zww/workspace/codes/github/rust-practice/queryset_v3_parse_error_no_dup.csv";
+
+    // 打开输入文件
+    let file = File::open(input_path).unwrap();
+    let reader = BufReader::with_capacity(10 * 1024 * 1024, file); // 1MB 缓冲区
+
+    // 创建 CSV 读取器
+    let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
+
+    // 创建 CSV 写入器
+    let file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open(output_path)
+        .unwrap();
+    let mut writer = WriterBuilder::new().has_headers(true).from_writer(file);
+
+    // 初始化统计信息
+    let mut stats = ProcessStats::new();
+    let start = Instant::now();
+    let mut last_progress_time = Instant::now();
+
+    // 读取和处理每一条SQL记录
+    let mut sql_set = std::collections::HashSet::new();
+
+    for (index, result) in csv_reader.records().enumerate() {
+        let record = match result {
+            Ok(record) => record,
+            Err(e) => {
+                eprintln!("CSV 读取错误 (行 {}): {}", index + 1, e);
+                continue;
+            }
+        };
+
+        if record.len() == 0 {
+            continue;
+        }
+
+        let sql = record[2].to_string();
+        stats.total_count += 1;
+
+        if sql_set.contains(&sql) {
+            continue;
+        }
+
+        sql_set.insert(sql.clone());
+        writer.write_record(&[&sql]).unwrap();
+
+        // 定期刷新输出文件
+        if stats.total_count % 10000 == 0 {
+            writer.flush().unwrap();
+        }
+
+        // 每5秒或每100,000条记录打印进度
+        if stats.total_count % 100000 == 0 || last_progress_time.elapsed().as_secs() >= 5 {
+            stats.print_progress(start.elapsed());
+            last_progress_time = Instant::now();
+        }
+    }
+
+    // 确保所有数据都写入磁盘
+    writer.flush().unwrap();
+
+    println!("Done!");
+}
+
+#[test]
+fn test_v3_parse_error_remove_dup() {
+    v3_parse_error_remove_dup();
 }
