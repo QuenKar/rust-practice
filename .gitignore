@@ -46,3 +46,5 @@ benchmarks/data
 *.code-workspace
 
 venv/
+
+*.csv

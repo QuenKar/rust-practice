@@ -1,8 +1,8 @@
 use csv::{ReaderBuilder, WriterBuilder};
-use sqlparser::dialect::GenericDialect;
+use sqlparser::dialect::MySqlDialect;
 use sqlparser::parser::Parser;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::BufReader;
 use std::path::Path;
 use std::time::Instant;
@@ -52,9 +52,9 @@ impl ProcessStats {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
-    let input_path = "sql_tspider.csv";
+    let input_path = "tspider-parser/queryset_0228_22000000.csv";
     let success_path = "tspider_parser_success.csv";
-    let error_path = "tspider_parser_error.csv";
+    let error_path = "tspider_parser_error_0228_22000000.csv";
 
     // 显示当前工作目录
     let current_dir = std::env::current_dir()?;
@@ -111,7 +111,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn create_output_writer(path: &str) -> Result<csv::Writer<File>, Box<dyn Error>> {
-    let writer = WriterBuilder::new().has_headers(true).from_path(path)?;
+    // use append mode
+    let file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open(path)?;
+    let writer = WriterBuilder::new().has_headers(true).from_writer(file);
     Ok(writer)
 }
 
@@ -123,7 +129,7 @@ fn process_sql_file(
     // 打开输入文件
     let file = File::open(input_path)?;
     let _file_size = file.metadata()?.len();
-    let reader = BufReader::with_capacity(1024 * 1024, file); // 1MB 缓冲区
+    let reader = BufReader::with_capacity(10 * 1024 * 1024, file); // 1MB 缓冲区
 
     // 创建 CSV 读取器
     let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
@@ -134,7 +140,7 @@ fn process_sql_file(
 
     // 初始化统计信息
     let mut stats = ProcessStats::new();
-    let dialect = GenericDialect {}; // SQL 方言
+    let dialect = MySqlDialect {}; // SQL 方言
     let start = Instant::now();
     let mut last_progress_time = Instant::now();
 
@@ -156,15 +162,17 @@ fn process_sql_file(
         stats.total_count += 1;
 
         // 尝试解析SQL
-        match Parser::parse_sql(&dialect, sql.to_owned()) {
+        match Parser::parse_sql(&dialect, sql) {
             Ok(_) => {
                 // SQL 解析成功
-                success_writer.write_record(&[sql])?;
+                // success_writer.write_record(&[sql])?;
                 stats.success_count += 1;
             }
-            Err(_) => {
+            Err(e) => {
                 // SQL 解析失败
+                eprintln!("SQL 解析失败 (行 {}): {}", index + 1, e);
                 error_writer.write_record(&[sql])?;
+                error_writer.write_record(&[e.to_string()])?;
                 stats.error_count += 1;
             }
         }
