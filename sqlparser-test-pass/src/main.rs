@@ -7,6 +7,8 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+pub(crate) mod remove_dup;
+
 struct ProcessStats {
     total_count: usize,
     success_count: usize,
@@ -56,11 +58,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("当前工作目录: {}", current_dir.display());
 
     // 获取 tspider-parser/0227/dataset 目录下所有的 *.csv 文件
-    let dataset_dir = "tspider-parser/0227/dataset";
-    let error_path = "tspider-parser/0227/output/error.csv";
+    let dataset_dir = "tspider-parser/0226/dataset";
+    let error_path = "tspider-parser/0226/output/error.csv";
 
     // 确保输出目录存在
-    std::fs::create_dir_all("tspider-parser/0227/output")?;
+    std::fs::create_dir_all("tspider-parser/0226/output")?;
 
     // 显示数据集目录
     println!("扫描数据集目录: {}", dataset_dir);
@@ -87,8 +89,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // 初始化CSV写入器
     let mut stats = ProcessStats::new();
-    // 初始化CSV写入器 (使用同一个错误输出文件)
-    let mut error_writer = create_output_writer(&error_path)?;
 
     for (index, input_path) in csv_files.iter().enumerate() {
         // 确认输入文件存在
@@ -103,8 +103,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             input_path.file_name().unwrap_or_default().to_string_lossy()
         );
 
+        // 初始化CSV写入器 (使用同一个错误输出文件)
+        let error_writer = create_output_writer(&error_path)?;
+
         // 处理文件
-        process_sql_file(input_path, &mut error_writer, &mut stats)?;
+        process_sql_file(input_path, error_writer, &mut stats)?;
     }
 
     // 打印总体统计信息
@@ -129,13 +132,13 @@ fn create_output_writer(path: &str) -> Result<csv::Writer<File>, Box<dyn Error>>
 
 fn process_sql_file(
     input_path: &PathBuf,
-    error_writer: &mut csv::Writer<File>,
+    mut error_writer: csv::Writer<File>,
     stats: &mut ProcessStats,
 ) -> Result<(), Box<dyn Error>> {
     // 打开输入文件
     let file = File::open(input_path)?;
     let _file_size = file.metadata()?.len();
-    let reader = BufReader::with_capacity(10 * 1024 * 1024, file); // 10MB 缓冲区
+    let reader = BufReader::with_capacity(100 * 1024 * 1024, file); // 10MB 缓冲区
 
     // 创建 CSV 读取器
     let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
