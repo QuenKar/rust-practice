@@ -34,7 +34,7 @@ fn deduplicate_error_csv(input_path: &str, output_path: &str) -> Result<(), Box<
     let start = Instant::now();
 
     // 写入头部
-    writer.write_record(&["sql"])?;
+    writer.write_record(["sql"])?;
 
     // 读取和处理每一条SQL记录
     for (index, result) in csv_reader.records().enumerate() {
@@ -64,7 +64,7 @@ fn deduplicate_error_csv(input_path: &str, output_path: &str) -> Result<(), Box<
 
         // 添加到去重集合并写入输出文件
         unique_sqls.insert(sql.clone());
-        writer.write_record(&[&sql])?;
+        writer.write_record([&sql])?;
         unique_count += 1;
 
         // 每10,000条记录刷新一次输出文件并显示进度
@@ -97,10 +97,28 @@ fn deduplicate_error_csv(input_path: &str, output_path: &str) -> Result<(), Box<
 }
 
 #[test]
-fn test_deduplicate_error_csv() -> Result<(), Box<dyn Error>> {
+fn test_deduplicate_error_csv_0227() -> Result<(), Box<dyn Error>> {
     let input_path =
         "/Users/zww/workspace/codes/github/rust-practice/tspider-parser/0227/output/error.csv";
     let output_path = "/Users/zww/workspace/codes/github/rust-practice/tspider-parser/0227/output/error-dedup.csv";
+    deduplicate_error_csv(input_path, output_path)?;
+    Ok(())
+}
+
+#[test]
+fn test_deduplicate_error_csv_0226() -> Result<(), Box<dyn Error>> {
+    let input_path =
+        "/Users/zww/workspace/codes/github/rust-practice/tspider-parser/0226/output/error.csv";
+    let output_path = "/Users/zww/workspace/codes/github/rust-practice/tspider-parser/0226/output/error-dedup.csv";
+    deduplicate_error_csv(input_path, output_path)?;
+    Ok(())
+}
+
+#[test]
+fn test_deduplicate_error_csv_0225() -> Result<(), Box<dyn Error>> {
+    let input_path =
+        "/Users/zww/workspace/codes/github/rust-practice/tspider-parser/0225/output/error.csv";
+    let output_path = "/Users/zww/workspace/codes/github/rust-practice/tspider-parser/0225/output/error-dedup.csv";
     deduplicate_error_csv(input_path, output_path)?;
     Ok(())
 }
