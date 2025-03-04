@@ -4,7 +4,7 @@ use sqlparser::parser::Parser;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 struct ProcessStats {
@@ -51,61 +51,67 @@ impl ProcessStats {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let start = Instant::now();
-    let input_path = "tspider-parser/queryset_0228_22000000.csv";
-    let success_path = "tspider_parser_success.csv";
-    let error_path = "tspider_parser_error_0228_22000000.csv";
-
     // 显示当前工作目录
     let current_dir = std::env::current_dir()?;
     println!("当前工作目录: {}", current_dir.display());
 
-    println!("开始处理大型 SQL CSV 文件: {}", input_path);
+    // 获取 tspider-parser/0227/dataset 目录下所有的 *.csv 文件
+    let dataset_dir = "tspider-parser/0227/dataset";
+    let error_path = "tspider-parser/0227/output/error.csv";
 
-    // 确认输入文件存在
-    if !Path::new(input_path).exists() {
-        return Err(format!("输入文件不存在: {}", input_path).into());
+    // 确保输出目录存在
+    std::fs::create_dir_all("tspider-parser/0227/output")?;
+
+    // 显示数据集目录
+    println!("扫描数据集目录: {}", dataset_dir);
+
+    // 获取所有CSV文件
+    let mut csv_files = Vec::new();
+    for entry in std::fs::read_dir(dataset_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("csv") {
+            csv_files.push(path);
+        }
     }
 
+    println!("找到 {} 个CSV文件", csv_files.len());
+    if csv_files.is_empty() {
+        return Err("未找到CSV文件".into());
+    }
+
+    // 按文件名排序
+    csv_files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    let global_start = Instant::now();
+
     // 初始化CSV写入器
-    let success_writer = create_output_writer(success_path)?;
-    let error_writer = create_output_writer(error_path)?;
+    let mut stats = ProcessStats::new();
+    // 初始化CSV写入器 (使用同一个错误输出文件)
+    let mut error_writer = create_output_writer(&error_path)?;
 
-    // 处理文件
-    let stats = process_sql_file(input_path, success_writer, error_writer)?;
+    for (index, input_path) in csv_files.iter().enumerate() {
+        // 确认输入文件存在
+        if !Path::new(input_path).exists() {
+            return Err(format!("输入文件不存在: {:?}", input_path).into());
+        }
 
-    let elapsed = start.elapsed();
+        println!(
+            "[{}/{}] 处理文件: {}",
+            index + 1,
+            csv_files.len(),
+            input_path.file_name().unwrap_or_default().to_string_lossy()
+        );
 
-    // 打印最终统计
-    println!("\n处理完成!");
-    println!("总计处理 SQL 语句: {}", stats.total_count);
-    println!(
-        "成功解析语句数: {} ({}%)",
-        stats.success_count,
-        if stats.total_count > 0 {
-            stats.success_count * 100 / stats.total_count
-        } else {
-            0
-        }
-    );
-    println!(
-        "解析失败语句数: {} ({}%)",
-        stats.error_count,
-        if stats.total_count > 0 {
-            stats.error_count * 100 / stats.total_count
-        } else {
-            0
-        }
-    );
-    println!("处理用时: {:.2} 秒", elapsed.as_secs_f64());
-    println!(
-        "平均处理速率: {:.2} 条/秒",
-        if elapsed.as_secs_f64() > 0.0 {
-            stats.total_count as f64 / elapsed.as_secs_f64()
-        } else {
-            0.0
-        }
-    );
+        // 处理文件
+        process_sql_file(input_path, &mut error_writer, &mut stats)?;
+    }
+
+    // 打印总体统计信息
+    stats.print_progress(global_start.elapsed());
+
+    println!("总计时：{} second", global_start.elapsed().as_secs());
+    println!("Done!");
 
     Ok(())
 }
@@ -122,10 +128,10 @@ fn create_output_writer(path: &str) -> Result<csv::Writer<File>, Box<dyn Error>>
 }
 
 fn process_sql_file(
-    input_path: &str,
-    mut success_writer: csv::Writer<File>,
-    mut error_writer: csv::Writer<File>,
-) -> Result<ProcessStats, Box<dyn Error>> {
+    input_path: &PathBuf,
+    error_writer: &mut csv::Writer<File>,
+    stats: &mut ProcessStats,
+) -> Result<(), Box<dyn Error>> {
     // 打开输入文件
     let file = File::open(input_path)?;
     let _file_size = file.metadata()?.len();
@@ -135,14 +141,15 @@ fn process_sql_file(
     let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
 
     // 写入头部
-    success_writer.write_record(&["sql"])?;
-    error_writer.write_record(&["sql"])?;
+    if stats.total_count == 0 {
+        error_writer.write_record(&["sql", "error"])?;
+    }
 
     // 初始化统计信息
-    let mut stats = ProcessStats::new();
     let dialect = MySqlDialect {}; // SQL 方言
     let start = Instant::now();
     let mut last_progress_time = Instant::now();
+    let _file_name = input_path.file_name().unwrap_or_default().to_string_lossy();
 
     // 读取和处理每一条SQL记录
     for (index, result) in csv_reader.records().enumerate() {
@@ -170,16 +177,13 @@ fn process_sql_file(
             }
             Err(e) => {
                 // SQL 解析失败
-                eprintln!("SQL 解析失败 (行 {}): {}", index + 1, e);
-                error_writer.write_record(&[sql])?;
-                error_writer.write_record(&[e.to_string()])?;
+                error_writer.write_record(&[sql, &e.to_string()])?;
                 stats.error_count += 1;
             }
         }
 
         // 定期刷新输出文件
         if stats.total_count % 10000 == 0 {
-            success_writer.flush()?;
             error_writer.flush()?;
         }
 
@@ -191,10 +195,9 @@ fn process_sql_file(
     }
 
     // 确保所有数据都写入磁盘
-    success_writer.flush()?;
     error_writer.flush()?;
 
-    Ok(stats)
+    Ok(())
 }
 
 #[test]
