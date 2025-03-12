@@ -923,6 +923,7 @@ dependencies = [
  "csv",
  "futures",
  "num_cpus",
+ "regex",
  "serde",
  "serde_json",
  "sqlparser",
