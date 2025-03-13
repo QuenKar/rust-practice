@@ -13,6 +13,9 @@ use std::time::Instant;
 pub(crate) mod minutex_sql_dedup;
 pub(crate) mod remove_dup;
 
+#[allow(unused)]
+pub mod doris;
+
 // 记录解析失败的SQL及错误信息
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SqlError {
@@ -63,127 +66,129 @@ impl ProcessStats {
     }
 }
 
+fn main() {}
+
 // fn main() {
 //     minutex_sql_dedup::extract_minutex_sql().unwrap();
 // }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // 显示当前工作目录
-    let current_dir = std::env::current_dir()?;
-    println!("当前工作目录: {}", current_dir.display());
+// fn main() -> Result<(), Box<dyn Error>> {
+//     // 显示当前工作目录
+//     let current_dir = std::env::current_dir()?;
+//     println!("当前工作目录: {}", current_dir.display());
 
-    // 获取指定目录下所有的 *.csv 文件
-    let dataset_dir = "doris-parser/0312";
-    let error_path = "doris-parser/0312/error.csv";
+//     // 获取指定目录下所有的 *.csv 文件
+//     let dataset_dir = "doris-parser/0312";
+//     let error_path = "doris-parser/0312/error_without_159_100968_5016750_5000448_rt.csv";
 
-    // 确保输出目录存在
-    std::fs::create_dir_all("doris-parser/0312")?;
+//     // 确保输出目录存在
+//     std::fs::create_dir_all("doris-parser/0312")?;
 
-    // 显示数据集目录
-    println!("扫描数据集目录: {}", dataset_dir);
+//     // 显示数据集目录
+//     println!("扫描数据集目录: {}", dataset_dir);
 
-    // 获取所有CSV文件
-    let mut csv_files = Vec::new();
-    for entry in std::fs::read_dir(dataset_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("csv") {
-            csv_files.push(path);
-        }
-    }
+//     // 获取所有CSV文件
+//     let mut csv_files = Vec::new();
+//     for entry in std::fs::read_dir(dataset_dir)? {
+//         let entry = entry?;
+//         let path = entry.path();
+//         if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("csv") {
+//             csv_files.push(path);
+//         }
+//     }
 
-    println!("找到 {} 个CSV文件", csv_files.len());
-    if csv_files.is_empty() {
-        return Err("未找到CSV文件".into());
-    }
+//     println!("找到 {} 个CSV文件", csv_files.len());
+//     if csv_files.is_empty() {
+//         return Err("未找到CSV文件".into());
+//     }
 
-    // 按文件名排序
-    csv_files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+//     // 按文件名排序
+//     csv_files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
 
-    let global_start = Instant::now();
+//     let global_start = Instant::now();
 
-    // 使用 tokio 运行时进行异步处理
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(num_cpus::get())
-        .enable_all()
-        .build()?;
+//     // 使用 tokio 运行时进行异步处理
+//     let runtime = tokio::runtime::Builder::new_multi_thread()
+//         .worker_threads(num_cpus::get())
+//         .enable_all()
+//         .build()?;
 
-    // 在运行时中执行异步任务
-    let (total_stats, sql_error_list) = runtime.block_on(async {
-        // 共享的统计数据和错误列表
-        let stats = Arc::new(Mutex::new(ProcessStats::new()));
-        let sql_error_list = Arc::new(Mutex::new(HashSet::<SqlError>::new()));
-        let csv_files_arc = Arc::new(csv_files.clone());
+//     // 在运行时中执行异步任务
+//     let (total_stats, sql_error_list) = runtime.block_on(async {
+//         // 共享的统计数据和错误列表
+//         let stats = Arc::new(Mutex::new(ProcessStats::new()));
+//         let sql_error_list = Arc::new(Mutex::new(HashSet::<SqlError>::new()));
+//         let csv_files_arc = Arc::new(csv_files.clone());
 
-        // 并发限制
-        let concurrency_limit = 6; // 调整为合适的并发数
+//         // 并发限制
+//         let concurrency_limit = 6; // 调整为合适的并发数
 
-        // 处理任务
-        let tasks = stream::iter(csv_files.clone().into_iter().enumerate())
-            .map(|(index, input_path)| {
-                let stats = Arc::clone(&stats);
-                let errors = Arc::clone(&sql_error_list);
-                let input_path = input_path.clone();
-                let csv_files = Arc::clone(&csv_files_arc);
-                async move {
-                    if !Path::new(&input_path).exists() {
-                        eprintln!("输入文件不存在: {:?}", input_path);
-                        return;
-                    }
+//         // 处理任务
+//         let tasks = stream::iter(csv_files.clone().into_iter().enumerate())
+//             .map(|(index, input_path)| {
+//                 let stats = Arc::clone(&stats);
+//                 let errors = Arc::clone(&sql_error_list);
+//                 let input_path = input_path.clone();
+//                 let csv_files = Arc::clone(&csv_files_arc);
+//                 async move {
+//                     if !Path::new(&input_path).exists() {
+//                         eprintln!("输入文件不存在: {:?}", input_path);
+//                         return;
+//                     }
 
-                    let binding = input_path.clone();
-                    let file_name = binding.file_name().unwrap_or_default().to_string_lossy();
+//                     let binding = input_path.clone();
+//                     let file_name = binding.file_name().unwrap_or_default().to_string_lossy();
 
-                    println!(
-                        "[{}/{}] 开始处理文件: {}",
-                        index + 1,
-                        csv_files.len(),
-                        file_name
-                    );
+//                     println!(
+//                         "[{}/{}] 开始处理文件: {}",
+//                         index + 1,
+//                         csv_files.len(),
+//                         file_name
+//                     );
 
-                    // 使用 spawn_blocking 处理 CPU 密集型任务
-                    let result = tokio::task::spawn_blocking(move || {
-                        process_sql_file_async(input_path.clone(), stats, errors)
-                    })
-                    .await;
+//                     // 使用 spawn_blocking 处理 CPU 密集型任务
+//                     let result = tokio::task::spawn_blocking(move || {
+//                         process_sql_file_async(input_path.clone(), stats, errors)
+//                     })
+//                     .await;
 
-                    match result {
-                        Ok(Ok(_)) => println!(
-                            "[{}/{}] 文件处理完成: {}",
-                            index + 1,
-                            csv_files.len(),
-                            file_name
-                        ),
-                        Ok(Err(e)) => eprintln!("处理文件 {} 时出错: {}", file_name, e),
-                        Err(e) => eprintln!("处理文件 {} 时任务失败: {}", file_name, e),
-                    }
-                }
-            })
-            .buffer_unordered(concurrency_limit)
-            .collect::<Vec<_>>();
+//                     match result {
+//                         Ok(Ok(_)) => println!(
+//                             "[{}/{}] 文件处理完成: {}",
+//                             index + 1,
+//                             csv_files.len(),
+//                             file_name
+//                         ),
+//                         Ok(Err(e)) => eprintln!("处理文件 {} 时出错: {}", file_name, e),
+//                         Err(e) => eprintln!("处理文件 {} 时任务失败: {}", file_name, e),
+//                     }
+//                 }
+//             })
+//             .buffer_unordered(concurrency_limit)
+//             .collect::<Vec<_>>();
 
-        // 等待所有任务完成
-        tasks.await;
+//         // 等待所有任务完成
+//         tasks.await;
 
-        // 返回最终的统计数据和错误列表
-        let final_stats = stats.lock().unwrap().clone();
-        let errors = sql_error_list.lock().unwrap().clone();
-        (final_stats, errors)
-    });
+//         // 返回最终的统计数据和错误列表
+//         let final_stats = stats.lock().unwrap().clone();
+//         let errors = sql_error_list.lock().unwrap().clone();
+//         (final_stats, errors)
+//     });
 
-    // 打印总体统计信息
-    total_stats.print_progress(global_start.elapsed());
+//     // 打印总体统计信息
+//     total_stats.print_progress(global_start.elapsed());
 
-    // 写入错误到CSV文件
-    let error_vec: Vec<SqlError> = sql_error_list.into_iter().collect();
-    write_errors_to_csv(error_path, &error_vec)?;
+//     // 写入错误到CSV文件
+//     let error_vec: Vec<SqlError> = sql_error_list.into_iter().collect();
+//     write_errors_to_csv(error_path, &error_vec)?;
 
-    println!("SQL 解析错误已写入: {}", error_path);
-    println!("总计时：{} 秒", global_start.elapsed().as_secs());
-    println!("Done!");
+//     println!("SQL 解析错误已写入: {}", error_path);
+//     println!("总计时：{} 秒", global_start.elapsed().as_secs());
+//     println!("Done!");
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 // 处理单个SQL文件（用于异步执行）
 fn process_sql_file_async(
@@ -234,12 +239,8 @@ fn process_sql_file_async(
         }
 
         let sql = record[0].to_string();
-        file_stats.total_count += 1;
 
-        if sql.starts_with("{") {
-            // 跳过JSON格式的SQL
-            continue;
-        }
+        file_stats.total_count += 1;
 
         // 尝试解析SQL
         match Parser::parse_sql(&dialect, &sql) {
