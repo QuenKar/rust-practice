@@ -1,17 +1,27 @@
 use std::{
     collections::HashSet,
-    fs::{File, OpenOptions},
-    io::BufReader,
+    fs::{self, File, OpenOptions},
+    io::{BufReader, Read, Write},
+    path::Path,
     time::Instant,
 };
 
 use csv::{ReaderBuilder, WriterBuilder};
+use regex::Regex;
 use sqlparser::parser::Parser;
 
 use crate::{ProcessStats, SqlError};
 
+const DATE: &str = "0306";
+
 // error_without_159_100968_5016750_5000448_rt
+
 #[test]
+pub fn test_doris_split() {
+    split_doris_query();
+    test_doris_parse();
+}
+
 pub fn test_doris_parse() {
     // 用于记录解析成功的SQL数量
     let mut success_count = 0;
@@ -19,14 +29,18 @@ pub fn test_doris_parse() {
     let mut sql_error_list = HashSet::new();
 
     // 创建一个sqlparser的解析器，使用PostgresqlDialect
-    let dialect = sqlparser::dialect::PostgreSqlDialect {};
+    let dialect = sqlparser::dialect::MySqlDialect {};
 
     // 读取sql.csv文件
-    let path = "/Users/zww/workspace/codes/github/rust-practice/doris-parser/0311/sql.csv";
+    let path = &format!(
+        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/{}/sql.csv",
+        DATE
+    );
     // 将解析失败的SQL写入到文件中
-    let mut wtr = csv::Writer::from_path(
-        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/0311/sql_error.csv",
-    )
+    let mut wtr = csv::Writer::from_path(&format!(
+        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/{}/sql_error.csv",
+        DATE
+    ))
     .unwrap();
     let mut rdr = csv::Reader::from_path(path).unwrap();
 
@@ -63,13 +77,14 @@ pub fn test_doris_parse() {
     }
 }
 
-#[test]
 fn split_doris_query() {
     let mut sql_count = 0;
     let mut json_count = 0;
     // 读取csv文件
-    let input_path =
-        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/0311/doris_queryset_0311.csv";
+    let input_path = &format!(
+        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/{}/doris_queryset_{}.csv",
+        DATE, DATE
+    );
     let file = File::open(input_path).unwrap();
     let reader = BufReader::with_capacity(10 * 1024 * 1024, file); // 1MB 缓冲区
 
@@ -77,18 +92,23 @@ fn split_doris_query() {
     let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
 
     // 创建 CSV 写入器，将sql和json分开写入两个文件
-    let output_path = "/Users/zww/workspace/codes/github/rust-practice/doris-parser/0311/sql.csv";
+    let output_path = &format!(
+        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/{}/sql.csv",
+        DATE
+    );
     let file = OpenOptions::new()
-        .append(true)
+        .write(true)
         .create(true)
         .open(output_path)
         .unwrap();
     let mut writer = WriterBuilder::new().has_headers(true).from_writer(file);
 
-    let output_path_json =
-        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/0311/json.csv";
+    let output_path_json = &format!(
+        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/{}/json.csv",
+        DATE
+    );
     let file_json = OpenOptions::new()
-        .append(true)
+        .write(true)
         .create(true)
         .open(output_path_json)
         .unwrap();
@@ -142,6 +162,39 @@ fn split_doris_query() {
     // 打印统计信息
     println!("SQL Count: {}", sql_count);
     println!("JSON Count: {}", json_count);
+}
+
+fn replace_rt_table_name() {
+    let file_path = &format!(
+        "/Users/zww/workspace/codes/github/rust-practice/doris-parser/{}/sql.csv",
+        DATE
+    );
+    let path = Path::new(file_path);
+
+    // 检查文件是否存在
+    if !path.exists() {
+        eprintln!("Error: File '{}' does not exist", file_path);
+        std::process::exit(1);
+    }
+
+    // 读取文件内容
+    let mut content = String::new();
+    fs::File::open(path)
+        .unwrap()
+        .read_to_string(&mut content)
+        .unwrap();
+
+    // 创建正则表达式模式，匹配数字后面跟着下划线和文本的模式
+    let pattern = Regex::new(r"\d+_([a-zA-Z]+)").unwrap();
+
+    // 替换文本
+    let result = pattern.replace_all(&content, "_$1");
+
+    // 写入替换后的内容到文件
+    let mut file = fs::File::create(path).unwrap();
+    file.write_all(result.as_bytes()).unwrap();
+
+    println!("Replacements completed in file: {}", file_path);
 }
 
 #[test]

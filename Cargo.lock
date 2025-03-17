@@ -908,12 +908,13 @@ dependencies = [
 
 [[package]]
 name = "sqlparser"
-version = "0.54.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c66e3b7374ad4a6af849b08b3e7a6eda0edbd82f0fd59b57e22671bf16979899"
+version = "0.55.0"
+source = "git+https://github.com/BKBASE-Plugin/datafusion-sqlparser-rs?rev=2b7c0828a24a4fe072e01fce1c2ab0ec24ee8795#2b7c0828a24a4fe072e01fce1c2ab0ec24ee8795"
 dependencies = [
  "log",
  "recursive",
+ "serde",
+ "sqlparser_derive",
 ]
 
 [[package]]
@@ -928,6 +929,16 @@ dependencies = [
  "serde_json",
  "sqlparser",
  "tokio",
+]
+
+[[package]]
+name = "sqlparser_derive"
+version = "0.3.0"
+source = "git+https://github.com/BKBASE-Plugin/datafusion-sqlparser-rs?rev=2b7c0828a24a4fe072e01fce1c2ab0ec24ee8795#2b7c0828a24a4fe072e01fce1c2ab0ec24ee8795"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
 ]
 
 [[package]]

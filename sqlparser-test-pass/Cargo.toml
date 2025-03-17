@@ -5,7 +5,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-sqlparser = "0.54.0"
+sqlparser = { git = "https://github.com/BKBASE-Plugin/datafusion-sqlparser-rs", rev = "2b7c0828a24a4fe072e01fce1c2ab0ec24ee8795",features = [
+    "serde",
+    "visitor",
+    "sqlparser_derive",
+] }
 tokio.workspace = true
 serde_json.workspace = true
 serde.workspace = true

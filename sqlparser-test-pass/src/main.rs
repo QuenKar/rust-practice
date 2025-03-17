@@ -16,6 +16,9 @@ pub(crate) mod remove_dup;
 #[allow(unused)]
 pub mod doris;
 
+#[allow(unused)]
+pub mod starrocks;
+
 // 记录解析失败的SQL及错误信息
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SqlError {
