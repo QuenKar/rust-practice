@@ -1,5 +1,5 @@
 [workspace]
-members = [ "sqlparser-test-pass","src/log-format-json", "src/rust_decimal"]
+members = [ "qdrant-test", "sqlparser-test-pass","src/log-format-json", "src/rust_decimal"]
 resolver = "2"
 
 [workspace.package]

@@ -1,0 +1,9 @@
+[package]
+name = "qdrant-test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+qdrant-client = "1.13.0"
+tokio.workspace = true
